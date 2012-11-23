@@ -20,9 +20,23 @@
 
 import socket,os
 import sys,signal
+import dbus
 
 from subprocess import call
 from time import sleep
+
+
+
+_session_bus = dbus.SessionBus()
+
+_dbus_power=_session_bus.get_object('org.freedesktop.PowerManagement','/org/freedesktop/PowerManagement')
+_s2ram = _dbus_power.get_dbus_method('Suspend','org.freedesktop.PowerManagement')
+_s2disk = _dbus_power.get_dbus_method('Hibernate','org.freedesktop.PowerManagement')
+
+_dbus_screensaver = _session_bus.get_object('org.freedesktop.ScreenSaver','/ScreenSaver')
+_lock = _dbus_screensaver.get_dbus_method('Lock','org.freedesktop.ScreenSaver')
+_simulate_activity = _dbus_screensaver.get_dbus_method('SimulateUserActivity','org.freedesktop.ScreenSaver')
+
 
 def get_cpus():
     '''Returns a list of CPU ids'''
@@ -108,7 +122,19 @@ class listener:
         self.lid_close = _nothing
         self.raw_event = _nothing
     
-            
+    def plugged_hook(self):
+        '''Checks if plugged or not and
+        calls the plugged or unplugged hooks.
+        
+        This function is very useful at startup or
+        after a wakeup when the plugged/unplugged
+        event will not be generated automatically.
+        '''
+        if is_plugged():
+            self.plugged()
+        else:
+            self.unplugged()
+        
     def listen(self):
         '''Starts listening to the ACPI events'''
         while 1:
@@ -139,67 +165,54 @@ def powersave_cpu(handler,minf,maxf,cpu):
 
 def lock_screen():
     '''Uses dbus to lock the screen'''
-    call (('qdbus', 'org.freedesktop.ScreenSaver', '/ScreenSaver','Lock'))
-
-def s2ram():
-    '''Uses dbus to suspend to RAM
+    return _lock()
     
-    if l is provided, the plugged/unplugged
-    events will be generated on wakeup, because
-    the status might have been changed in the meanwhile
-    '''
-    call(('sudo','s2ram'))
-
-    #Changes in plug status aren't notified, manual check
-    if l != None:
-        if is_plugged():
-            l.plugged()
-        else:
-            l.unplugged()
-
+def simulate_user_activity():
+    '''Simulates some activity to stop the screensaver from triggering'''
+    _simulate_activity()
+    
+def s2ram():
+    '''Uses dbus to suspend to RAM'''
+    return _s2ram()
+def s2disk():
+    return _s2disk()
+    
 ##############################################################
 
 def main():
-    daemonize()
+    def plugged():
+        freqs=get_frequencies()
+        powersave_cpu('ondemand',min(freqs),max(freqs) ,get_cpus())
 
-    if is_plugged():
-        plugged()
-    else:
-        unplugged()
-   
+    def unplugged():
+        freqs=get_frequencies()
+        powersave_cpu('ondemand',min(freqs),min(freqs),get_cpus())
+
+    def lid_close():
+        lock_screen()
+        s2ram()
+        l.plugged_hook()
+
+    def power_button():
+        lock_screen()
+        if not is_plugged():
+            s2ram()
+            l.plugged_hook()
+    def ev(e):
+        print e
+    
+    #daemonize()
+
     l = listener()
     print "Connected to acpid"
-    l.plugged = plugged
-    l.unplugged = unplugged
+    #l.plugged = plugged
+    #l.unplugged = unplugged
     l.lid_close = lid_close
-    l.lid_open = lid_open
     l.power_button = power_button
+    l.raw_event = ev
     
-    #['processor', 'LNXCPU:00', '00000081', '00000000']
-    #['processor', 'LNXCPU:01', '00000081', '00000000']
-    #['battery', 'PNP0C0A:00', '00000080', '00000001']    
-
-
-def plugged():
-    freqs=get_frequencies()
-    powersave_cpu('ondemand',min(freqs),max(freqs) ,get_cpus())
-
-def unplugged():
-    freqs=get_frequencies()
-    powersave_cpu('ondemand',min(freqs),min(freqs),get_cpus())
-
-def lid_close():
-    lock_screen()
-    s2ram()
-
-def lid_open():
-    pass
-
-def power_button():
-    lock_screen()
-    if not is_plugged():
-        s2ram()
-
+    l.plugged_hook()
+    l.listen()
 
 if __name__=='__main__':
     main()
