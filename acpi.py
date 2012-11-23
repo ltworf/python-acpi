@@ -25,6 +25,7 @@ from subprocess import call
 from time import sleep
 
 def get_cpus():
+    '''Returns a list of CPU ids'''
     f=open('/sys/devices/system/cpu/present')
     freq=f.read(4096)
     f.close()
@@ -33,7 +34,11 @@ def get_cpus():
 
 def get_frequencies(cpu=0):
     '''Returns a list of available frequencies for the selectec CPU. Usually
-    it can be assumed that all the CPUs are the same'''
+    it can be assumed that all the CPUs are the same.
+    
+    Frequencies are indicated in Mhz
+    
+    If not specified the list is about CPU 0'''
     f=open('/sys/devices/system/cpu/cpu%d/cpufreq/scaling_available_frequencies'%cpu)
     freq=f.read(4096)
     f.close()
@@ -45,6 +50,7 @@ def get_frequencies(cpu=0):
     return freq
 
 def get_governors(cpu=0):
+    '''Returns a list of frequency governors available for a CPU'''
     f=open('/sys/devices/system/cpu/cpu%d/cpufreq/scaling_available_governors'%cpu)
     freq=f.read(4096)
     f.close()
@@ -52,6 +58,9 @@ def get_governors(cpu=0):
 
 #/sys/bus/acpi/drivers/ac/ACPI0003\:00/power_supply/ADP1/online 
 def is_plugged():
+    '''Returns True if the power is plugged and False otherwise.
+    On systems where the information is not available, it will raise an
+    exception'''
     f=open('/sys/bus/acpi/drivers/ac/ACPI0003:00/power_supply/ADP1/online')
     if f.read(1)=='0':
         res=False
@@ -110,9 +119,11 @@ def powersave_cpu(handler,minf,maxf,cpu):
         print ('sudo','cpufreq-set','-u%dMhz' % maxf,'-d%dMhz' % minf,'-c%d' %i)
 
 def lock_screen():
+    '''Uses dbus to lock the screen'''
     call (('qdbus', 'org.freedesktop.ScreenSaver', '/ScreenSaver','Lock'))
 
 def s2ram():
+    '''Uses dbus to suspend to RAM'''
     call(('sudo','s2ram'))
 
     #Changes in plug status aren't notified, manual check
