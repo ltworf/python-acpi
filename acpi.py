@@ -76,39 +76,58 @@ def daemonize():
     #For some VERY VERY odd reason, kde will crash on login (resulting in logout) if that sleep is not there
     sleep(30)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
-
-def main():
-    daemonize()
-
-    if is_plugged():
-        plugged()
+def _nothing(*a):
+    pass
+def _call_event(event):
+    if isinstance(event,list):
+        for i in event:
+            i()
     else:
-        unplugged()
-
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    s.connect("/var/run/acpid.socket")
-    print "Connected to acpid"
-    while 1:
-        #conn, addr = s.accept()
-        for event in s.recv(4096).split('\n'):
-            event=event.split(' ')
-            if len(event)<2: continue
-            print event
-            if event[0]=='ac_adapter':
-                if event[3]=='00000001': #plugged
-                    plugged()
-                else: #unplugged
-                    unplugged()
-            elif event[0]=='button/power':
-                power_button()
-            elif event[0]=='button/lid':
-                if event[2]=='open':
-                    lid_open()
-                elif event[2]=='close':
-                    lid_close()
-    #['processor', 'LNXCPU:00', '00000081', '00000000']
-    #['processor', 'LNXCPU:01', '00000081', '00000000']
-    #['battery', 'PNP0C0A:00', '00000080', '00000001']    
+        event()
+class listener:
+    '''This class listens to acpi events and
+    generates events accordingly.
+    
+    To receive the events, replace the
+    plugged,unplugged and so on variables
+    
+    they can be a single function or a list
+    of functions'''
+    def __init__(self,threaded=False,acpi_socket='/var/run/acpid.socket'):
+        #TODO what if threaded = True?
+        
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.connect(acpi_socket)
+        self.s = s
+        
+        #Events
+        self.plugged = _nothing
+        self.unplugged = _nothing
+        self.power_button = _nothing
+        self.lid_open = _nothing
+        self.lid_close = _nothing
+        self.raw_event = _nothing
+    
+            
+    def listen(self):
+        '''Starts listening to the ACPI events'''
+        while 1:
+            for event in self.s.recv(4096).split('\n'):
+                event=event.split(' ')
+                if len(event)<2: continue
+                self.raw_event(event)
+                if event[0]=='ac_adapter':
+                    if event[3]=='00000001':
+                        self.plugged()
+                    else:
+                        self.unplugged()
+                elif event[0]=='button/power':
+                    self.power_button()
+                elif event[0]=='button/lid':
+                    if event[2]=='open':
+                        self.lid_open()
+                    elif event[2]=='close':
+                        self.lid_close()
 
 def powersave_cpu(handler,minf,maxf,cpu):
 
@@ -123,19 +142,42 @@ def lock_screen():
     call (('qdbus', 'org.freedesktop.ScreenSaver', '/ScreenSaver','Lock'))
 
 def s2ram():
-    '''Uses dbus to suspend to RAM'''
+    '''Uses dbus to suspend to RAM
+    
+    if l is provided, the plugged/unplugged
+    events will be generated on wakeup, because
+    the status might have been changed in the meanwhile
+    '''
     call(('sudo','s2ram'))
 
     #Changes in plug status aren't notified, manual check
-    if is_plugged():
-        print "woke up as plugged"
-        plugged()
-    else:
-        print "woke up as unplugged"
-        unplugged()
+    if l != None:
+        if is_plugged():
+            l.plugged()
+        else:
+            l.unplugged()
 
 ##############################################################
 
+def main():
+    daemonize()
+
+    if is_plugged():
+        plugged()
+    else:
+        unplugged()
+   
+    l = listener()
+    print "Connected to acpid"
+    l.plugged = plugged
+    l.unplugged = unplugged
+    l.lid_close = lid_close
+    l.lid_open = lid_open
+    l.power_button = power_button
+    
+    #['processor', 'LNXCPU:00', '00000081', '00000000']
+    #['processor', 'LNXCPU:01', '00000081', '00000000']
+    #['battery', 'PNP0C0A:00', '00000080', '00000001']    
 
 
 def plugged():
