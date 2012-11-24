@@ -25,8 +25,6 @@ import dbus
 from subprocess import call
 from time import sleep
 
-
-
 _session_bus = dbus.SessionBus()
 
 _dbus_power=_session_bus.get_object('org.freedesktop.PowerManagement','/org/freedesktop/PowerManagement')
@@ -70,7 +68,6 @@ def get_governors(cpu=0):
     f.close()
     return freq.strip().split(' ')
 
-#/sys/bus/acpi/drivers/ac/ACPI0003\:00/power_supply/ADP1/online 
 def is_plugged():
     '''Returns True if the power is plugged and False otherwise.
     On systems where the information is not available, it will raise an
@@ -201,7 +198,7 @@ def main():
     def ev(e):
         print e
     
-    #daemonize()
+    daemonize()
 
     l = listener()
     print "Connected to acpid"
