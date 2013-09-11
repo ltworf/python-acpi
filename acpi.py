@@ -51,15 +51,24 @@ def get_frequencies(cpu=0):
     Frequencies are indicated in Mhz
     
     If not specified the list is about CPU 0'''
-    f=open('/sys/devices/system/cpu/cpu%d/cpufreq/scaling_available_frequencies'%cpu)
-    freq=f.read(4096)
-    f.close()
-    freq=freq.strip().split(' ')
+    try:
+        f=open('/sys/devices/system/cpu/cpu%d/cpufreq/scaling_available_frequencies'%cpu)
+        freq=f.read(4096)
+        f.close()
+        freq=freq.strip().split(' ')
     
-    #converting to Mhz integers
-    for i in range(len(freq)):
-        freq[i]=int(freq[i]) / 1000
-    return freq
+        return [int(i)/1000 for i in freq]
+    except:
+        maxf=open('/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq'%cpu)
+        minf=open('/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_min_freq'%cpu)
+
+        mx=int(maxf.readline())/1000
+        mn=int(minf.readline())/1000
+
+        maxf.close()
+        minf.close()
+
+        return [mx,mn]
 
 def get_governors(cpu=0):
     '''Returns a list of frequency governors available for a CPU'''
@@ -163,6 +172,10 @@ def powersave_cpu(handler,minf,maxf,cpu):
 def lock_screen():
     '''Uses dbus to lock the screen'''
     return _lock()
+
+def screen_off():
+    #TODO maybe do it with a different method
+    call(('xset','dpms', 'force', 'off'))
     
 def simulate_user_activity():
     '''Simulates some activity to stop the screensaver from triggering'''
@@ -195,6 +208,8 @@ def main():
         if not is_plugged():
             s2ram()
             l.plugged_hook()
+        else:
+            screen_off()
     def ev(e):
         print e
     
@@ -202,8 +217,8 @@ def main():
 
     l = listener()
     print "Connected to acpid"
-    #l.plugged = plugged
-    #l.unplugged = unplugged
+    l.plugged = plugged
+    l.unplugged = unplugged
     l.lid_close = lid_close
     l.power_button = power_button
     l.raw_event = ev
